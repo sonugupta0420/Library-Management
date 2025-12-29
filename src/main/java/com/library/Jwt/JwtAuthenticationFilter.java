@@ -1,0 +1,58 @@
+package com.library.Jwt;
+
+import com.library.Repository.UserRepository;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+@RequiredArgsConstructor
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private final JwtService jwtService;
+
+    @Autowired
+    private final UserRepository userRepository;
+
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        final String authHeader = request.getHeader("Authorization");
+        final String jwtToken;
+        final String username;
+
+        //check if the Authorization header is present and starts with "Bearer "
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        //extract the JWT token from the Authorization header
+        jwtToken = authHeader.substring(7);
+        username = jwtService.extractUsername(jwtToken);
+
+        //validate the token and set the authentication in the security context
+        if (username != null && SecurityContextHolder.getContext().getAuthentication()== null) {
+
+            //get user details from the database
+            var userDetails = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
+            if (jwtService.isTokenValid(jwtToken, userDetails)) {
+                var authToken = jwtService.getAuthenticationToken(jwtToken, SecurityContextHolder.getContext().getAuthentication(), userDetails);
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+            filterChain.doFilter(request, response);
+        }
+
+    }
+
+
+}
