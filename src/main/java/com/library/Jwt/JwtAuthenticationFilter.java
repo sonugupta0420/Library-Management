@@ -7,11 +7,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -46,10 +50,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             //get user details from the database
             var userDetails = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
             if (jwtService.isTokenValid(jwtToken, userDetails)) {
-                var authToken = jwtService.getAuthenticationToken(jwtToken, SecurityContextHolder.getContext().getAuthentication(), userDetails);
+                List<SimpleGrantedAuthority> authorities = userDetails.getRoles().stream()
+                        .map(SimpleGrantedAuthority::new)
+                        .toList();
+
+
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        null,
+                        authorities
+                );
+
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+
+                filterChain.doFilter(request, response);
+
+
             }
-            filterChain.doFilter(request, response);
+
         }
 
     }
